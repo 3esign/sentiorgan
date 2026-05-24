@@ -515,6 +515,8 @@ const Engine = {
         Engine.controls.maxPolarAngle = Math.PI / 2; 
         Engine.controls.target.set(0, 15, 0); 
         Engine.controls.enablePan = false;
+        Engine.controls.autoRotate = true; // Cinematic sweeping camera
+        Engine.controls.autoRotateSpeed = 0.5;
 
         Engine.ambientLight = new THREE.AmbientLight(0x111111, 2);
         Engine.scene.add(Engine.ambientLight);
