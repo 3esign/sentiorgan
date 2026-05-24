@@ -420,7 +420,13 @@ Respond ONLY with a strict JSON object (No markdown, no backticks, no preamble):
 const Engine = {
     scene: new THREE.Scene(),
     camera: new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000),
-    renderer: new THREE.WebGLRenderer({ antialias: true, alpha: true }),
+    // Anti-Flicker Renderer Settings
+    renderer: new THREE.WebGLRenderer({ 
+        antialias: true, 
+        alpha: true,
+        powerPreference: "high-performance",
+        logarithmicDepthBuffer: true // Prevents z-fighting/flickering at extreme depths
+    }),
     controls: null,
     pipes: [], 
     sparks: [], 
@@ -438,6 +444,8 @@ const Engine = {
     init: () => {
         const container = document.getElementById('canvas-container');
         Engine.renderer.setSize(window.innerWidth, window.innerHeight);
+        // Cap pixel ratio to 2 to prevent screen recorders from choking on ultra-high-res retina displays
+        Engine.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2)); 
         Engine.renderer.setClearColor(0x020101, 1);
         container.appendChild(Engine.renderer.domElement);
         
