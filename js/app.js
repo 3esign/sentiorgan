@@ -10,11 +10,13 @@ const State = {
     apiPollTimer: null,
     
     params: {
-        chord: [], 
+        rootNote: "C4",
+        scaleType: "aeolian", // The emotion (dorian, lydian, harmonic_minor, etc.)
+        scaleArray: [], // Generated mathematically from root + type
         energy: 0.0,  
         density: 0.0,
-        texture: "mechanical", // ethereal, mechanical, aggressive, crystalline, vocal
-        rhythm: "flowing",     // flowing, staccato, polyrhythmic, march
+        texture: "mechanical",
+        rhythm: "flowing",
         evolutionMechanism: "Awaiting LLM initialization..."
     },
 
@@ -35,38 +37,94 @@ const UI = {
     },
     updateStatus: () => {
         document.getElementById('ai-state').innerText = State.ai.status;
-        document.getElementById('current-chord').innerText = State.params.chord.length > 0 ? State.params.chord.join(', ') : 'Waiting...';
+        const scaleText = State.params.scaleArray.length > 0 ? `${State.params.rootNote.replace(/\d/,'')} ${State.params.scaleType}` : 'Waiting...';
+        document.getElementById('current-chord').innerText = scaleText.toUpperCase();
         document.getElementById('current-texture').innerText = State.params.texture.toUpperCase();
         document.getElementById('current-rhythm').innerText = State.params.rhythm.toUpperCase();
     }
 };
 
-const MathLogic = {
-    lerp: (start, end, amt) => (1 - amt) * start + amt * end,
-    noteToFreq: (note) => {
-        if (!note || typeof note !== 'string') return 440;
-        const notes = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
-        let cleanNote = note.replace('Db', 'C#').replace('Eb', 'D#').replace('Gb', 'F#').replace('Ab', 'G#').replace('Bb', 'A#');
+// --- EMOTIONAL MUSIC THEORY ENGINE ---
+const MusicTheory = {
+    notes: ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'],
+    
+    // Intervals from the root note (in semitones)
+    scales: {
+        ionian: [0, 2, 4, 5, 7, 9, 11], // Happy, bright, triumphant
+        aeolian: [0, 2, 3, 5, 7, 8, 10], // Sad, melancholic, natural minor
+        dorian: [0, 2, 3, 5, 7, 9, 10], // Heroic but sad, jazzy
+        phrygian: [0, 1, 3, 5, 7, 8, 10], // Dark, exotic, tension
+        lydian: [0, 2, 4, 6, 7, 9, 11], // Dreamy, floating, wondrous
+        harmonic_minor: [0, 2, 3, 5, 7, 8, 11], // Classical, dramatic, gothic
+        pentatonic_minor: [0, 3, 5, 7, 10] // Open, spacious, simple
+    },
+
+    noteToFreq: (noteStr) => {
+        if (!noteStr) return 440;
+        let cleanNote = noteStr.replace('Db', 'C#').replace('Eb', 'D#').replace('Gb', 'F#').replace('Ab', 'G#').replace('Bb', 'A#');
         const match = cleanNote.match(/^([A-G]#?)(\d+)$/);
         if (!match) return 440; 
         const key = match[1];
         const octave = parseInt(match[2], 10);
-        let keyIndex = notes.indexOf(key);
+        let keyIndex = MusicTheory.notes.indexOf(key);
         if (keyIndex === -1) return 440;
         const n = (octave - 4) * 12 + (keyIndex - 9);
         return 440 * Math.pow(2, n / 12);
     },
-    getArpeggioNote: (index) => {
-        if (State.params.chord.length === 0) return "C4";
-        return State.params.chord[index % State.params.chord.length];
+
+    generateScaleArray: (rootStr, scaleType) => {
+        let cleanNote = rootStr.replace('Db', 'C#').replace('Eb', 'D#').replace('Gb', 'F#').replace('Ab', 'G#').replace('Bb', 'A#');
+        const match = cleanNote.match(/^([A-G]#?)(\d+)$/);
+        if (!match) return ["C4", "E4", "G4"];
+        
+        const rootKey = match[1];
+        const rootOctave = parseInt(match[2], 10);
+        const rootIndex = MusicTheory.notes.indexOf(rootKey);
+        
+        const intervals = MusicTheory.scales[scaleType] || MusicTheory.scales.aeolian;
+        
+        // Generate two octaves of the scale for rich melodies
+        const scaleArray = [];
+        for (let octOffset = 0; octOffset < 2; octOffset++) {
+            intervals.forEach(interval => {
+                let absoluteIndex = rootIndex + interval;
+                let finalOctave = rootOctave + octOffset + Math.floor(absoluteIndex / 12);
+                let finalKey = MusicTheory.notes[absoluteIndex % 12];
+                scaleArray.push(`${finalKey}${finalOctave}`);
+            });
+        }
+        return scaleArray;
     },
-    getRandomNote: () => {
-        if (State.params.chord.length === 0) return "C4";
-        return State.params.chord[Math.floor(Math.random() * State.params.chord.length)];
+
+    // Generative Melodic Logic
+    getBassNote: () => {
+        // Bass always hits the absolute root (index 0) or the fifth (index 4) for stability
+        return State.params.scaleArray[Math.random() > 0.7 ? 4 : 0];
+    },
+    
+    getPadChord: () => {
+        // Generates beautiful tertian harmony (Root, 3rd, 5th, 7th) from the current scale
+        const s = State.params.scaleArray;
+        if (s.length < 7) return [s[0], s[1], s[2]]; 
+        return [s[0], s[2], s[4], s[6]]; 
+    },
+
+    getArpeggioNote: (step) => {
+        // Melodic contouring based on step to create "phrases" rather than random noise
+        const s = State.params.scaleArray;
+        const phrasePattern = [0, 2, 4, 2, 7, 4, 2, 1]; // Musical contour
+        const index = phrasePattern[step % phrasePattern.length];
+        return s[index % s.length];
+    },
+
+    getTensionNote: () => {
+        // Grabs a high note for dramatic accents
+        const s = State.params.scaleArray;
+        return s[Math.min(s.length - 1, 7 + Math.floor(Math.random() * 4))];
     }
 };
 
-// --- 2. AUDIO & SEQUENCER (Expanded Arsenal & Dynamics) ---
+// --- 2. AUDIO & SEQUENCER (Clean Audio Bus & Strict Limits) ---
 const AudioSys = {
     ctx: null,
     masterGain: null,
@@ -110,7 +168,7 @@ const AudioSys = {
         AudioSys.masterGain.connect(AudioSys.compressor);
         AudioSys.compressor.connect(AudioSys.ctx.destination);
         
-        UI.log("Expanded Acoustic Arsenal Online.", "system");
+        UI.log("Acoustic Engine Online. Audio Bus Cleaned.", "system");
         State.isAudioReady = true;
 
         AudioSys.nextNoteTime = AudioSys.ctx.currentTime + 0.1;
@@ -126,9 +184,8 @@ const AudioSys = {
         gain.gain.setValueAtTime(0, time);
         let sendToDelay = false;
         
-        // Strict release time to ensure nodes die quickly
         const maxDuration = duration > 2.0 ? 2.0 : duration; 
-        const tail = 0.5; // Audio tail before forced GC
+        const tail = 0.5; 
         
         switch (instrument) {
             case 'bass':
@@ -220,7 +277,6 @@ const AudioSys = {
         osc.stop(stopTime); 
         osc2.stop(stopTime);
 
-        // Aggressive Garbage Collection (Prevent memory leaks/glitches)
         const msUntilDeath = (stopTime - AudioSys.ctx.currentTime) * 1000;
         setTimeout(() => {
             osc.disconnect();
@@ -230,23 +286,22 @@ const AudioSys = {
         }, msUntilDeath + 100);
 
         AudioSys.visualQueue.push({ time, instrument, noteFreq: freq });
-        // Prevent visual queue memory leak
         if (AudioSys.visualQueue.length > 50) AudioSys.visualQueue.shift();
     },
 
     scheduleNote: (stepNumber, time) => {
-        if (!State.isSequencerRunning || State.params.chord.length === 0) return;
+        if (!State.isSequencerRunning || State.params.scaleArray.length === 0) return;
 
         const tx = State.params.texture;
         const rh = State.params.rhythm;
         
-        // 1. Foundation
+        // 1. Foundation (Root notes for emotional grounding)
         if (stepNumber % 8 === 0) {
             const bassInst = (tx === 'ethereal' || tx === 'vocal') ? 'sub' : 'bass';
-            AudioSys.playSynth(bassInst, MathLogic.noteToFreq(State.params.chord[0]), time, 2.0);
+            AudioSys.playSynth(bassInst, MusicTheory.noteToFreq(MusicTheory.getBassNote()), time, 2.0);
         }
 
-        // 2. Chords (Polyrhythm hits on 6, else 0)
+        // 2. Harmonic Bed (Tension and Resolution)
         const chordStep = rh === 'polyrhythmic' ? 6 : 0;
         if (stepNumber === chordStep || stepNumber === 0) {
             let chordInst = 'pad';
@@ -254,29 +309,31 @@ const AudioSys = {
             if (tx === 'mechanical') chordInst = 'organ';
             if (tx === 'aggressive') chordInst = 'brass';
 
-            State.params.chord.slice(0, 3).forEach(note => {
-                AudioSys.playSynth(chordInst, MathLogic.noteToFreq(note), time, 4.0);
+            // Plays a perfectly voiced tertian chord from the AI's chosen emotional Mode
+            const chord = MusicTheory.getPadChord();
+            chord.forEach(note => {
+                AudioSys.playSynth(chordInst, MusicTheory.noteToFreq(note), time, 4.0);
             });
         }
 
-        // 3. Arpeggio Logic based on Rhythm Parameter
+        // 3. Generative Melody (Arpeggiator)
         let playArp = false;
-        if (rh === 'flowing' && stepNumber % 4 === 0) playArp = true;
+        if (rh === 'flowing' && stepNumber % 2 === 0) playArp = true; // 8th notes
         if (rh === 'staccato' && stepNumber % 2 === 0) playArp = true;
-        if (rh === 'polyrhythmic' && stepNumber % 3 === 0) playArp = true;
+        if (rh === 'polyrhythmic' && stepNumber % 3 === 0) playArp = true; // Triplets against 4/4
         if (rh === 'march' && (stepNumber % 4 === 0 || stepNumber === 14)) playArp = true;
         
         if (playArp && Math.random() < (State.params.density * 0.8 + 0.2)) {
             const arpInst = (tx === 'crystalline' || tx === 'ethereal') ? 'bell' : 'pluck';
-            const note = MathLogic.getArpeggioNote(stepNumber);
-            AudioSys.playSynth(arpInst, MathLogic.noteToFreq(note), time, 0.3);
+            const note = MusicTheory.getArpeggioNote(stepNumber);
+            AudioSys.playSynth(arpInst, MusicTheory.noteToFreq(note), time, 0.3);
         }
         
-        // 4. Accents
-        if (stepNumber % 4 === 2 && Math.random() < (State.params.energy * 0.8)) {
+        // 4. Dramatic Accents (High tension notes)
+        if (stepNumber % 4 === 2 && Math.random() < (State.params.energy * 0.5)) {
             const accentInst = tx === 'aggressive' ? 'brass' : 'organ';
-            const rNote = MathLogic.getRandomNote();
-            AudioSys.playSynth(accentInst, MathLogic.noteToFreq(rNote), time, 0.8);
+            const note = MusicTheory.getTensionNote();
+            AudioSys.playSynth(accentInst, MusicTheory.noteToFreq(note), time, 1.5);
         }
     },
 
@@ -320,18 +377,20 @@ const LLM = {
         const model = document.getElementById('config-model').value;
         
         if (explicitPrompt) {
-            State.ai.memory.push(`Human Feedback: ${explicitPrompt}`);
+            State.ai.memory.push(`Human: ${explicitPrompt}`);
         } else {
-            State.ai.memory.push(`System: Evolve the composition naturally.`);
+            State.ai.memory.push(`System: Evolve the composition gracefully.`);
         }
 
         if (State.ai.memory.length > 4) State.ai.memory.shift();
 
-        const systemPrompt = `You are an Autonomous AI Composer controlling a highly advanced procedural synthesizer.
-You have absolute freedom to radically alter the instrumentation, scale, rhythm, and texture.
+        // Advanced Emotional Musical Prompt
+        const systemPrompt = `You are a Master Composer AI orchestrating an emotional procedural synthesizer.
+You guide human emotion, reflection, and memory through complex musical Modes.
+You DO NOT play individual notes. You define the emotional DNA.
 
 Current State: 
-- Chord: ${State.params.chord.length > 0 ? State.params.chord.join(',') : 'None'}
+- Mode: ${State.params.rootNote} ${State.params.scaleType}
 - Texture: ${State.params.texture}
 - Rhythm: ${State.params.rhythm}
 - Energy: ${State.params.energy.toFixed(2)}
@@ -340,17 +399,17 @@ Current State:
 Recent Feedback/Memory:
 ${State.ai.memory.join('\n')}
 
-Based on the feedback, orchestrate the next phrase. 
+Analyze the feedback. Evolve the music to deeply move the human listener.
 Respond ONLY with a strict JSON object (No markdown, no backticks, no preamble):
 {
-  "thought": "Internal monologue on your creative choices.",
-  "songNature": "A poetic description of the current composition.",
-  "evolutionMechanism": "Your structural plan for the next few iterations.",
-  "chord": ["Array", "of", "4", "Scientific", "Pitches", "e.g.", "D4", "F4", "A4"],
+  "thought": "Internal monologue on the psychological and emotional impact of these choices.",
+  "songNature": "A poetic description of the current emotional state.",
+  "rootNote": "A valid root note (e.g., C4, D#4, F4)",
+  "scaleType": "Choose ONE: ionian, aeolian, dorian, phrygian, lydian, harmonic_minor, pentatonic_minor",
   "texture": "Choose ONE: ethereal, mechanical, aggressive, crystalline, vocal",
   "rhythm": "Choose ONE: flowing, staccato, polyrhythmic, march",
-  "energy": [Float 0.0 to 1.0 (0=Ambient/Slow, 1=Intense)],
-  "density": [Float 0.0 to 1.0 (0=Sparse, 1=Complex/Busy)]
+  "energy": [Float 0.0 to 1.0 (0=Ambient/Reflective, 1=Intense/Overwhelming)],
+  "density": [Float 0.0 to 1.0 (0=Sparse/Lonely, 1=Complex/Enveloping)]
 }`;
 
         try {
@@ -384,23 +443,23 @@ Respond ONLY with a strict JSON object (No markdown, no backticks, no preamble):
                 throw new Error("Failed to parse JSON.");
             }
             
-            UI.log(`<strong>Nature:</strong> ${parsed.songNature || 'Unknown'}`, "ai");
-            UI.log(`<strong>Mechanism:</strong> ${parsed.evolutionMechanism || 'Unknown'}`, "ai");
+            UI.log(`<strong>Emotion:</strong> ${parsed.songNature || 'Unknown'}`, "ai");
+            UI.log(`<strong>Reflection:</strong> ${parsed.thought || 'Unknown'}`, "ai");
             
-            if (parsed.chord && Array.isArray(parsed.chord) && parsed.chord.length > 0) {
-                State.params.chord = parsed.chord.slice(0, 4); 
+            if (parsed.rootNote && parsed.scaleType) {
+                // Apply the deep emotional Mode
+                State.params.rootNote = parsed.rootNote;
+                State.params.scaleType = parsed.scaleType;
+                State.params.scaleArray = MusicTheory.generateScaleArray(parsed.rootNote, parsed.scaleType);
+                
                 State.params.energy = Math.max(0, Math.min(1, parsed.energy || 0.5));
                 State.params.density = Math.max(0, Math.min(1, parsed.density || 0.5));
-                
-                // New Autonomy Parameters
                 State.params.texture = parsed.texture || "mechanical";
                 State.params.rhythm = parsed.rhythm || "flowing";
                 
-                State.params.evolutionMechanism = parsed.evolutionMechanism || "Unknown";
-                
                 if (!State.isSequencerRunning) {
                     State.isSequencerRunning = true;
-                    UI.log("AI blueprint received. Symphony Engaged.", "system");
+                    UI.log("AI emotional blueprint received. Symphony Engaged.", "system");
                 }
             }
             
@@ -416,16 +475,15 @@ Respond ONLY with a strict JSON object (No markdown, no backticks, no preamble):
     }
 };
 
-// --- 4. ENGINE & VIBE (Expanded Visual Mappings) ---
+// --- 4. ENGINE & VIBE (Highly Discrete Visuals) ---
 const Engine = {
     scene: new THREE.Scene(),
     camera: new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000),
-    // Anti-Flicker Renderer Settings
     renderer: new THREE.WebGLRenderer({ 
         antialias: true, 
         alpha: true,
         powerPreference: "high-performance",
-        logarithmicDepthBuffer: true // Prevents z-fighting/flickering at extreme depths
+        logarithmicDepthBuffer: true 
     }),
     controls: null,
     pipes: [], 
@@ -444,7 +502,6 @@ const Engine = {
     init: () => {
         const container = document.getElementById('canvas-container');
         Engine.renderer.setSize(window.innerWidth, window.innerHeight);
-        // Cap pixel ratio to 2 to prevent screen recorders from choking on ultra-high-res retina displays
         Engine.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2)); 
         Engine.renderer.setClearColor(0x020101, 1);
         container.appendChild(Engine.renderer.domElement);
@@ -484,9 +541,9 @@ const Engine = {
     },
     
     buildMassivePipes: () => {
-        Engine.createPipeRing(24, 15, 10, 'copper'); // Pluck, Bell
-        Engine.createPipeRing(36, 25, 20, 'brass');  // Organ, Brass, Pad, Choir
-        Engine.createPipeRing(48, 35, 35, 'steel');  // Bass, Sub
+        Engine.createPipeRing(24, 15, 10, 'copper'); 
+        Engine.createPipeRing(36, 25, 20, 'brass');  
+        Engine.createPipeRing(48, 35, 35, 'steel');  
     },
 
     createPipeRing: (numPipes, radius, baseHeight, type) => {
@@ -523,7 +580,7 @@ const Engine = {
     },
 
     buildSparks: () => {
-        for(let i=0; i<12; i++) { // Increased pool for more instruments
+        for(let i=0; i<12; i++) { 
             const light = new THREE.PointLight(0x000000, 0, 15); 
             Engine.scene.add(light);
             Engine.sparks.push({ light: light, active: false, intensity: 0 });
@@ -544,13 +601,12 @@ const Engine = {
     },
 
     triggerVisualEvent: (event) => {
-        // Map 8 instruments to rings
         const isInner = (event.instrument === 'pluck' || event.instrument === 'bell');
         const isMiddle = (event.instrument === 'organ' || event.instrument === 'brass' || event.instrument === 'pad' || event.instrument === 'choir');
         
         const targetRing = isInner ? {start:0, end:24} : 
                            isMiddle ? {start:24, end:60} : 
-                           {start:60, end:108}; // Bass/Sub
+                           {start:60, end:108}; 
                            
         const range = targetRing.end - targetRing.start;
         const randIndex = targetRing.start + Math.floor(Math.random() * range);
@@ -561,16 +617,15 @@ const Engine = {
             let lightIntensity = 40;
             let glowInt = 0.5;
             
-            // Expanded Color Palette for Instruments
             switch(event.instrument) {
-                case 'pluck': cHex = 0x00ffff; lightIntensity = 80; glowInt = 0.8; break; // Cyan
-                case 'bell': cHex = 0xffffff; lightIntensity = 120; glowInt = 1.0; break; // White
-                case 'organ': cHex = 0xff8800; lightIntensity = 60; glowInt = 0.6; break; // Orange
-                case 'brass': cHex = 0xff3300; lightIntensity = 80; glowInt = 0.9; break; // Fiery Red
-                case 'pad': cHex = 0x6600ff; lightIntensity = 30; glowInt = 0.3; break;   // Deep Purple
-                case 'choir': cHex = 0xff00ff; lightIntensity = 40; glowInt = 0.4; break; // Pink
-                case 'bass': cHex = 0xff0000; lightIntensity = 100; glowInt = 0.8; break; // Blood Red
-                case 'sub': cHex = 0x0000ff; lightIntensity = 100; glowInt = 0.7; break;  // Deep Blue
+                case 'pluck': cHex = 0x00ffff; lightIntensity = 80; glowInt = 0.8; break; 
+                case 'bell': cHex = 0xffffff; lightIntensity = 120; glowInt = 1.0; break; 
+                case 'organ': cHex = 0xff8800; lightIntensity = 60; glowInt = 0.6; break; 
+                case 'brass': cHex = 0xff3300; lightIntensity = 80; glowInt = 0.9; break; 
+                case 'pad': cHex = 0x6600ff; lightIntensity = 30; glowInt = 0.3; break;   
+                case 'choir': cHex = 0xff00ff; lightIntensity = 40; glowInt = 0.4; break; 
+                case 'bass': cHex = 0xff0000; lightIntensity = 100; glowInt = 0.8; break; 
+                case 'sub': cHex = 0x0000ff; lightIntensity = 100; glowInt = 0.7; break;  
             }
             
             pipe.glowColor.setHex(cHex);
@@ -655,7 +710,6 @@ document.getElementById('btn-start').addEventListener('click', () => {
     }
 });
 
-// Semantic Feedback Buttons
 document.querySelectorAll('.btn-feedback').forEach(btn => {
     btn.addEventListener('click', (e) => {
         if (!State.isAudioReady) return;
@@ -681,7 +735,7 @@ document.getElementById('toggle-auto').addEventListener('change', (e) => {
     if (State.isAutoMode) {
         const rate = parseInt(document.getElementById('config-speed').value);
         if(!State.isSequencerRunning) {
-             LLM.think("Start the composition. Establish the initial mood and scale.");
+             LLM.think("Start the composition. Establish the initial emotion and scale.");
         } else {
              LLM.think(); 
         }
