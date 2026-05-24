@@ -1,0 +1,15 @@
+{
+  "version": 2,
+  "name": "sentient-steampunk-organ",
+  "headers": [
+    {
+      "source": "/(.*)",
+      "headers": [
+        {
+          "key": "Access-Control-Allow-Origin",
+          "value": "*"
+        }
+      ]
+    }
+  ]
+}

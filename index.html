@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sentient Steampunk Organ</title>
+    <link rel="stylesheet" href="css/style.css">
+    <script async src="https://unpkg.com/es-module-shims@1.8.0/dist/es-module-shims.js"></script>
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+          "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+        }
+      }
+    </script>
+</head>
+<body>
+    <div id="canvas-container"></div>
+    <div id="ui-layer">
+        <div class="col-left">
+            <div class="glass-panel main-controls">
+                <h1>The Sentient Organ</h1>
+                <p class="subtitle">Continuous Parametric Symphony</p>
+                <div class="status-grid">
+                    <div class="status-item">
+                        <span class="label">AI State</span>
+                        <span class="value" id="ai-state">DORMANT</span>
+                    </div>
+                    <div class="status-item">
+                        <span class="label">Parametric Scale</span>
+                        <span class="value" id="current-chord">-</span>
+                    </div>
+                    <div class="status-item" style="margin-top: 10px;">
+                        <span class="label">Texture</span>
+                        <span class="value" id="current-texture" style="color: #ffaa00;">-</span>
+                    </div>
+                    <div class="status-item" style="margin-top: 10px;">
+                        <span class="label">Rhythm</span>
+                        <span class="value" id="current-rhythm" style="color: #00ffff;">-</span>
+                    </div>
+                </div>
+                
+                <div class="interaction-zone">
+                    <p class="section-title">Human Feedback</p>
+                    <p style="font-size: 10px; color: #888; margin-bottom: 10px;">Guide the AI's musical evolution:</p>
+                    
+                    <div class="feedback-matrix">
+                        <button class="btn-feedback" data-prompt="The music is too heavy and muddy. Simplify the arrangement, use fewer notes, and introduce silence.">Too Heavy / Muddy</button>
+                        <button class="btn-feedback" data-prompt="The music is too chaotic. Bring it back to a classical, harmonious, and slow resolution.">Harmonize / Calm</button>
+                        <button class="btn-feedback" data-prompt="Increase the energy and complexity. Add rhythmic tension and dissonance.">More Tension</button>
+                        <button class="btn-feedback" data-prompt="Make the sound more ethereal, ambient, and mysterious. Focus on the pads and high plucks.">More Ethereal</button>
+                    </div>
+
+                    <div class="button-group" style="margin-top: 15px;">
+                        <button id="btn-start" class="btn-primary">1. Ignite Boiler</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="glass-panel settings-panel">
+                <p class="section-title">LLM Configuration</p>
+                <div class="input-group">
+                    <label>Provider Endpoint (CORS Proxy)</label>
+                    <input type="text" id="config-endpoint" value="http://localhost:8001/api/generate">
+                </div>
+                <div class="input-group">
+                    <label>Model Name</label>
+                    <input type="text" id="config-model" value="gemma4:31b-cloud">
+                </div>
+                <div class="input-group" style="margin-top: 15px;">
+                    <label>API Polling Rate (Calls per Minute)</label>
+                    <input type="range" id="config-speed" min="2" max="30" step="1" value="6" style="width: 100%;">
+                    <span id="speed-label" style="font-size: 9px; color: #888; text-align: right; display: block; margin-top: 4px;">6 API Calls / Min (Every 10s)</span>
+                </div>
+                <div class="toggle-group">
+                    <label class="switch">
+                        <input type="checkbox" id="toggle-auto">
+                        <span class="slider"></span>
+                    </label>
+                    <span>Auto-Evolve Mode (Endless Play)</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-right">
+            <div class="glass-panel memory-panel">
+                <p class="section-title">Shared Memory Stream</p>
+                <p class="subtitle">The evolving context of the song</p>
+                <div id="log"></div>
+            </div>
+        </div>
+    </div>
+    <script type="module" src="js/app.js"></script>
+</body>
+</html>
