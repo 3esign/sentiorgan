@@ -1,6 +1,11 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
+// --- MATH LOGIC ---
+const MathLogic = {
+    lerp: (a, b, t) => a + (b - a) * t
+};
+
 // --- 1. STATE (The Parametric Brain) ---
 const State = {
     time: 0,
@@ -12,12 +17,13 @@ const State = {
     params: {
         rootNote: "C4",
         scaleType: "aeolian", 
-        scaleArray: [], 
-        energy: 0.1,  
-        density: 0.1,
+        scaleArray: ["C4", "D4", "D#4", "F4", "G4", "G#4", "A#4", "C5", "D5", "D#5", "F5", "G5", "G#5", "A#5"], 
+        currentChordNotes: ["C3", "D#3", "G3", "A#3"],
+        energy: 0.35,  
+        density: 0.4,
         texture: "mechanical",
         rhythm: "flowing",
-        evolutionMechanism: "Awaiting LLM initialization..."
+        evolutionMechanism: "Atmospheric baseline activated."
     },
 
     ai: {
@@ -95,28 +101,61 @@ const MusicTheory = {
         } catch (e) { return ["C4", "E4", "G4"]; }
     },
 
-    getBassNote: () => {
-        if (!State.params.scaleArray.length) return "C2";
-        return State.params.scaleArray[Math.random() > 0.7 ? 4 : 0];
+    getBassNote: (stepNumber) => {
+        const s = State.params.scaleArray;
+        if (!s || !s.length) return "C2";
+        
+        // Dynamic bass line follows the chord progression (I - IV - VI - V)
+        const progression = [0, 3, 5, 4]; 
+        const progIndex = Math.floor(stepNumber / 4) % progression.length;
+        const rootIndex = progression[progIndex];
+        
+        const note = s[rootIndex % s.length];
+        const m = note.match(/^([A-G]#?)(\d+)$/);
+        if (!m) return "C2";
+        const oct = Math.max(1, parseInt(m[2]) - 2); 
+        return `${m[1]}${oct}`;
     },
     
-    getPadChord: () => {
+    getPadChord: (stepNumber) => {
         const s = State.params.scaleArray;
-        if (s.length < 7) return s.length > 0 ? [s[0]] : ["C3"]; 
-        return [s[0], s[2], s[4], s[6]]; 
+        if (!s || s.length < 10) return ["C3", "E3", "G3"];
+        
+        // I - IV - VI - V progression chord degrees
+        const progression = [0, 3, 5, 4]; 
+        const progIndex = Math.floor(stepNumber / 4) % progression.length;
+        const rootIndex = progression[progIndex];
+        
+        const n1 = s[rootIndex % s.length];
+        const n2 = s[(rootIndex + 2) % s.length];
+        const n3 = s[(rootIndex + 4) % s.length];
+        const n4 = s[(rootIndex + 6) % s.length];
+        
+        const shiftDown = (noteStr) => {
+            const m = noteStr.match(/^([A-G]#?)(\d+)$/);
+            if (!m) return noteStr;
+            const oct = Math.max(1, parseInt(m[2]) - 1); 
+            return `${m[1]}${oct}`;
+        };
+        
+        const chord = [shiftDown(n1), shiftDown(n2), shiftDown(n3), shiftDown(n4)];
+        State.params.currentChordNotes = chord; // Sync chord notes with state
+        return chord;
     },
 
-    getArpeggioNote: (step) => {
-        const s = State.params.scaleArray;
-        if (!s.length) return "C4";
-        const phrasePattern = [0, 2, 4, 2, 7, 4, 2, 1]; 
-        const index = phrasePattern[step % phrasePattern.length];
-        return s[index % s.length];
+    getArpeggioNote: (stepNumber) => {
+        const chord = State.params.currentChordNotes || ["C3", "D#3", "G3", "A#3"];
+        // Dynamically play chord tones detuned 2 octaves up for gorgeous sweet runs
+        const note = chord[stepNumber % chord.length];
+        const m = note.match(/^([A-G]#?)(\d+)$/);
+        if (!m) return note;
+        const oct = parseInt(m[2]) + 2; 
+        return `${m[1]}${oct}`;
     },
 
     getTensionNote: () => {
         const s = State.params.scaleArray;
-        if (!s.length) return "C5";
+        if (!s || !s.length) return "C5";
         return s[Math.min(s.length - 1, 7 + Math.floor(Math.random() * 4))];
     }
 };
@@ -180,67 +219,73 @@ const AudioSys = {
         const tail = 0.5; 
         switch (instrument) {
             case 'bass':
-                osc.type = 'sawtooth'; osc.frequency.setValueAtTime(freq * 0.25, time); 
-                osc2.type = 'sine'; osc2.frequency.setValueAtTime(freq * 0.25, time);
-                filter.type = 'lowpass'; filter.frequency.setValueAtTime(80, time);
-                filter.frequency.exponentialRampToValueAtTime(400, time + 0.1);
-                filter.frequency.exponentialRampToValueAtTime(80, time + maxDuration);
-                gain.gain.linearRampToValueAtTime(0.6, time + 0.05);
+                osc.type = 'triangle'; osc.frequency.setValueAtTime(freq, time); 
+                osc2.type = 'sine'; osc2.frequency.setValueAtTime(freq * 1.002, time);
+                filter.type = 'lowpass'; filter.frequency.setValueAtTime(180, time);
+                gain.gain.linearRampToValueAtTime(0.4, time + 0.08);
                 gain.gain.exponentialRampToValueAtTime(0.001, time + maxDuration);
                 break;
             case 'sub':
-                osc.type = 'sine'; osc.frequency.setValueAtTime(freq * 0.25, time); 
-                osc2.type = 'sine'; osc2.frequency.setValueAtTime(freq * 0.25, time);
-                filter.type = 'lowpass'; filter.frequency.setValueAtTime(100, time);
+                osc.type = 'sine'; osc.frequency.setValueAtTime(freq, time); 
+                osc2.type = 'sine'; osc2.frequency.setValueAtTime(freq * 0.998, time);
+                filter.type = 'lowpass'; filter.frequency.setValueAtTime(90, time);
                 gain.gain.linearRampToValueAtTime(0.5, time + 0.1);
                 gain.gain.exponentialRampToValueAtTime(0.001, time + maxDuration);
                 break;
             case 'pluck':
-                osc.type = 'square'; osc.frequency.setValueAtTime(freq * 2, time); 
-                osc2.type = 'triangle'; osc2.frequency.setValueAtTime(freq * 2.01, time); 
-                filter.type = 'bandpass'; filter.frequency.setValueAtTime(2000, time);
-                gain.gain.linearRampToValueAtTime(0.2, time + 0.01);
-                gain.gain.exponentialRampToValueAtTime(0.001, time + 0.2);
+                // Detuned sweet acoustic pluck
+                osc.type = 'triangle'; osc.frequency.setValueAtTime(freq, time); 
+                osc2.type = 'sine'; osc2.frequency.setValueAtTime(freq * 1.005, time); 
+                filter.type = 'lowpass'; filter.frequency.setValueAtTime(1000, time);
+                filter.frequency.exponentialRampToValueAtTime(150, time + 0.15);
+                gain.gain.linearRampToValueAtTime(0.18, time + 0.005);
+                gain.gain.exponentialRampToValueAtTime(0.001, time + 0.25);
                 sendToDelay = true;
                 break;
             case 'bell':
-                osc.type = 'sine'; osc.frequency.setValueAtTime(freq * 2, time); 
-                osc2.type = 'sine'; osc2.frequency.setValueAtTime(freq * 5.56, time);
-                filter.type = 'highpass'; filter.frequency.setValueAtTime(500, time);
-                gain.gain.linearRampToValueAtTime(0.2, time + 0.005);
-                gain.gain.exponentialRampToValueAtTime(0.001, time + 0.8);
+                // Celestial FM glass chimes
+                osc.type = 'sine'; osc.frequency.setValueAtTime(freq, time); 
+                osc2.type = 'sine'; osc2.frequency.setValueAtTime(freq * 3.003, time);
+                filter.type = 'highpass'; filter.frequency.setValueAtTime(600, time);
+                gain.gain.linearRampToValueAtTime(0.12, time + 0.005);
+                gain.gain.exponentialRampToValueAtTime(0.001, time + 1.2);
                 sendToDelay = true;
                 break;
             case 'pad':
-                osc.type = 'sine'; osc.frequency.setValueAtTime(freq, time);
-                osc2.type = 'sine'; osc2.frequency.setValueAtTime(freq * 1.005, time); 
-                filter.type = 'lowpass'; filter.frequency.setValueAtTime(800, time);
-                gain.gain.linearRampToValueAtTime(0.12, time + 1.0);
-                gain.gain.setTargetAtTime(0, time + maxDuration, 1.0);
+                // Deep retro analog string pad (detuned sub octaves)
+                osc.type = 'sawtooth'; osc.frequency.setValueAtTime(freq * 0.5, time);
+                osc2.type = 'triangle'; osc2.frequency.setValueAtTime(freq * 0.504, time); 
+                filter.type = 'lowpass'; filter.frequency.setValueAtTime(350, time);
+                filter.frequency.exponentialRampToValueAtTime(550, time + 1.5);
+                gain.gain.linearRampToValueAtTime(0.10, time + 1.2); // Soft slow attack
+                gain.gain.setTargetAtTime(0, time + maxDuration, 0.8);
                 break;
             case 'choir':
-                osc.type = 'sawtooth'; osc.frequency.setValueAtTime(freq, time);
-                osc2.type = 'sawtooth'; osc2.frequency.setValueAtTime(freq * 0.99, time); 
-                filter.type = 'bandpass'; filter.frequency.setValueAtTime(1090, time); filter.Q.value = 4;
-                gain.gain.linearRampToValueAtTime(0.15, time + 0.5);
+                // Heavenly vocal space
+                osc.type = 'triangle'; osc.frequency.setValueAtTime(freq, time);
+                osc2.type = 'sawtooth'; osc2.frequency.setValueAtTime(freq * 1.002, time); 
+                filter.type = 'bandpass'; filter.frequency.setValueAtTime(1000, time); filter.Q.value = 5;
+                gain.gain.linearRampToValueAtTime(0.12, time + 0.6);
                 gain.gain.exponentialRampToValueAtTime(0.001, time + maxDuration);
                 sendToDelay = true;
                 break;
             case 'organ':
-                osc.type = 'sawtooth'; osc.frequency.setValueAtTime(freq, time);
-                osc2.type = 'square'; osc2.frequency.setValueAtTime(freq * 2, time); 
-                filter.type = 'lowpass'; filter.frequency.setValueAtTime(2500, time);
-                gain.gain.linearRampToValueAtTime(0.1, time + 0.1);
+                // Classic soft pipe organ
+                osc.type = 'sine'; osc.frequency.setValueAtTime(freq, time);
+                osc2.type = 'triangle'; osc2.frequency.setValueAtTime(freq * 2.001, time); 
+                filter.type = 'lowpass'; filter.frequency.setValueAtTime(1500, time);
+                gain.gain.linearRampToValueAtTime(0.08, time + 0.2);
                 gain.gain.exponentialRampToValueAtTime(0.001, time + maxDuration);
                 sendToDelay = true;
                 break;
             case 'brass':
+                // Warm, rich brass swelling
                 osc.type = 'sawtooth'; osc.frequency.setValueAtTime(freq, time);
-                osc2.type = 'sawtooth'; osc2.frequency.setValueAtTime(freq * 1.01, time); 
-                filter.type = 'lowpass'; filter.frequency.setValueAtTime(200, time);
-                filter.frequency.linearRampToValueAtTime(3000, time + 0.2); 
-                filter.frequency.exponentialRampToValueAtTime(200, time + maxDuration);
-                gain.gain.linearRampToValueAtTime(0.15, time + 0.1);
+                osc2.type = 'sawtooth'; osc2.frequency.setValueAtTime(freq * 1.008, time); 
+                filter.type = 'lowpass'; filter.frequency.setValueAtTime(180, time);
+                filter.frequency.linearRampToValueAtTime(2200, time + 0.25); 
+                filter.frequency.exponentialRampToValueAtTime(220, time + maxDuration);
+                gain.gain.linearRampToValueAtTime(0.11, time + 0.15);
                 gain.gain.exponentialRampToValueAtTime(0.001, time + maxDuration);
                 sendToDelay = true;
                 break;
@@ -268,16 +313,15 @@ const AudioSys = {
         const rh = State.params.rhythm;
         if (stepNumber % 8 === 0) {
             const bassInst = (tx === 'ethereal' || tx === 'vocal') ? 'sub' : 'bass';
-            AudioSys.playSynth(bassInst, MusicTheory.noteToFreq(MusicTheory.getBassNote()), time, 2.0);
+            AudioSys.playSynth(bassInst, MusicTheory.noteToFreq(MusicTheory.getBassNote(stepNumber)), time, 2.0);
         }
-        const chordStep = rh === 'polyrhythmic' ? 6 : 0;
-        if (stepNumber === chordStep || stepNumber === 0) {
+        if (stepNumber % 4 === 0) {
             let chordInst = 'pad';
             if (tx === 'vocal') chordInst = 'choir';
             if (tx === 'mechanical') chordInst = 'organ';
             if (tx === 'aggressive') chordInst = 'brass';
-            MusicTheory.getPadChord().forEach(note => {
-                AudioSys.playSynth(chordInst, MusicTheory.noteToFreq(note), time, 4.0);
+            MusicTheory.getPadChord(stepNumber).forEach(note => {
+                AudioSys.playSynth(chordInst, MusicTheory.noteToFreq(note), time, 2.0);
             });
         }
         let playArp = false;
@@ -296,7 +340,7 @@ const AudioSys = {
     },
 
     nextNote: () => {
-        const energy = isNaN(State.params.energy) ? 0.1 : State.params.energy;
+        const energy = Number.isNaN(Number(State.params.energy)) ? 0.1 : Number(State.params.energy);
         const tempo = 50 + (energy * 70); 
         const secondsPerBeat = 60.0 / Math.max(1, tempo);
         AudioSys.nextNoteTime += 0.25 * secondsPerBeat; 
@@ -306,10 +350,12 @@ const AudioSys = {
     scheduler: () => {
         try {
             let catchUpLimit = 0;
-            while (AudioSys.nextNoteTime < AudioSys.ctx.currentTime + AudioSys.scheduleAheadTime && catchUpLimit < 32) {
-                AudioSys.scheduleNote(AudioSys.currentStep, AudioSys.nextNoteTime);
-                AudioSys.nextNote();
-                catchUpLimit++;
+            if (AudioSys.ctx) {
+                while (AudioSys.nextNoteTime < AudioSys.ctx.currentTime + AudioSys.scheduleAheadTime && catchUpLimit < 32) {
+                    AudioSys.scheduleNote(AudioSys.currentStep, AudioSys.nextNoteTime);
+                    AudioSys.nextNote();
+                    catchUpLimit++;
+                }
             }
             AudioSys.timerID = setTimeout(AudioSys.scheduler, AudioSys.lookahead);
         } catch (e) { console.error("Scheduler Error:", e); }
@@ -331,25 +377,50 @@ const LLM = {
         UI.updateStatus();
         const endpoint = document.getElementById('config-endpoint').value;
         const model = document.getElementById('config-model').value;
-        if (explicitPrompt) State.ai.memory.push(`Human: ${explicitPrompt}`);
-        else State.ai.memory.push(`System: Evolve the composition gracefully.`);
-        if (State.ai.memory.length > 4) State.ai.memory.shift();
-        const systemPrompt = `You are a Master Composer AI. Respond ONLY with a strict JSON object:
+        
+        if (explicitPrompt) {
+            State.ai.memory.push(`Human: "${explicitPrompt}"`);
+        } else {
+            State.ai.memory.push(`System: Evolve composition naturally.`);
+        }
+        if (State.ai.memory.length > 6) State.ai.memory.shift();
+
+        const systemPrompt = `You are a Master Composer AI driving a physical procedural steampunk organ. Evolve the music based on current parameters and recent human/system feedback.
+You must respond ONLY with a valid JSON object matching this exact schema:
 {
-  "thought": "Internal monologue.",
-  "songNature": "A poetic description.",
-  "rootNote": "e.g. C4, D#4, F4",
+  "thought": "A detailed 1-2 sentence musical and emotional reasoning of how you are evolving the song.",
+  "songNature": "A poetic, evocative 3-5 word description of the current vibe (e.g. 'Glowing Brass Dawn', 'Starlight Melancholy').",
+  "rootNote": "Select a root note: C4, C#4, D4, D#4, E4, F4, F#4, G4, G#4, A4, A#4, B4",
   "scaleType": "ionian, aeolian, dorian, phrygian, lydian, harmonic_minor, pentatonic_minor",
   "texture": "ethereal, mechanical, aggressive, crystalline, vocal",
   "rhythm": "flowing, staccato, polyrhythmic, march",
   "energy": 0.5,
   "density": 0.5
 }`;
+
+        const memoryString = State.ai.memory.join('\n');
+        const currentStateString = `Current Music Parameters:
+- Root Note: ${State.params.rootNote}
+- Scale Type: ${State.params.scaleType}
+- Texture: ${State.params.texture}
+- Rhythm: ${State.params.rhythm}
+- Energy: ${State.params.energy}
+- Density: ${State.params.density}`;
+
+        const fullPrompt = `${systemPrompt}
+
+${currentStateString}
+
+Recent Logs & Feedback Stream:
+${memoryString}
+
+Based on the feedback and current parameters, write the next logical and beautiful step in our steampunk symphony. Respond ONLY with the JSON object.`;
+
         try {
             const response = await fetch(endpoint, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ model: model, prompt: systemPrompt, stream: false, format: 'json' })
+                body: JSON.stringify({ model: model, prompt: fullPrompt, stream: false, format: 'json' })
             });
             const data = await response.json();
             let rawText = data.response;
@@ -361,7 +432,12 @@ const LLM = {
                 if (start !== -1 && end !== -1) parsed = JSON.parse(rawText.substring(start, end + 1));
                 else throw new Error("No JSON object found.");
             } catch (pE) { throw new Error("Failed to parse JSON."); }
+
+            if (parsed.thought) {
+                UI.log(`<em>"${parsed.thought}"</em>`, "ai");
+            }
             UI.log(`<strong>Emotion:</strong> ${parsed.songNature || 'Unknown'}`, "ai");
+
             if (parsed.rootNote && parsed.scaleType) {
                 State.params.rootNote = parsed.rootNote;
                 State.params.scaleType = parsed.scaleType;
@@ -369,12 +445,16 @@ const LLM = {
                 const safeF = (v, d) => {
                     let res = Array.isArray(v) ? v[0] : v;
                     res = parseFloat(res);
-                    return isNaN(res) ? d : res;
+                    return Number.isNaN(res) ? d : res;
                 };
                 State.params.energy = Math.max(0.01, Math.min(1, safeF(parsed.energy, 0.5)));
                 State.params.density = Math.max(0.01, Math.min(1, safeF(parsed.density, 0.5)));
                 State.params.texture = parsed.texture || "mechanical";
                 State.params.rhythm = parsed.rhythm || "flowing";
+                
+                // Record choice in memory for next think cycle
+                State.ai.memory.push(`AI Action: Played ${parsed.rootNote} ${parsed.scaleType} (${parsed.texture}, ${parsed.rhythm}, energy: ${State.params.energy}).`);
+                
                 if (!State.isSequencerRunning) {
                     State.isSequencerRunning = true;
                     AudioSys.nextNoteTime = AudioSys.ctx.currentTime + 0.1;
@@ -398,7 +478,6 @@ const Engine = {
     renderer: null,
     controls: null,
     pipes: [], 
-    sparks: [], 
     particles: null,
     ambientLight: null,
     baseProps: {
@@ -413,11 +492,14 @@ const Engine = {
             // BASIC RENDERER (NO DEPTH BUFFER HACKS)
             Engine.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
             Engine.renderer.setSize(window.innerWidth, window.innerHeight);
-            Engine.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2)); 
+            const pr = window.devicePixelRatio || 1;
+            Engine.renderer.setPixelRatio(Math.min(pr, 2)); 
             Engine.renderer.setClearColor(0x020101, 1);
             container.appendChild(Engine.renderer.domElement);
             Engine.scene.fog = new THREE.FogExp2(0x020101, 0.01);
-            Engine.camera.position.set(0, 10, 60);
+            
+            // Reposition camera inside the circle as requested
+            Engine.camera.position.set(0, 15, 40);
             Engine.controls = new OrbitControls(Engine.camera, Engine.renderer.domElement);
             Engine.controls.enableDamping = true;
             Engine.controls.dampingFactor = 0.05;
@@ -425,13 +507,13 @@ const Engine = {
             Engine.controls.target.set(0, 15, 0); 
             Engine.controls.autoRotate = true;
             Engine.controls.autoRotateSpeed = 0.5;
+
             Engine.ambientLight = new THREE.AmbientLight(0x111111, 2);
             Engine.scene.add(Engine.ambientLight);
             const spotlight = new THREE.PointLight(0xffddaa, 1000, 200);
             spotlight.position.set(0, 20, 30);
             Engine.scene.add(spotlight);
             Engine.buildMassivePipes();
-            Engine.buildSparks();
             Engine.buildParticles();
             window.addEventListener('resize', () => {
                 Engine.camera.aspect = window.innerWidth / window.innerHeight;
@@ -450,11 +532,11 @@ const Engine = {
 
     createPipeRing: (numPipes, radius, baseHeight, type) => {
         for (let i = 0; i < numPipes; i++) {
+            // ARC Flipped so faces look at camera
             const angle = Math.PI + (i / (numPipes - 1)) * Math.PI; 
             const height = baseHeight + (Math.random() * 15);
             const geo = new THREE.CylinderGeometry(1.5, 1.2, height, 16);
             const matProps = Engine.baseProps[type];
-            // STABLE MATERIAL
             const mat = new THREE.MeshStandardMaterial({
                 color: matProps.color, metalness: matProps.metalness, roughness: matProps.roughness,
                 emissive: 0x000000, emissiveIntensity: 0
@@ -463,14 +545,6 @@ const Engine = {
             mesh.position.set(Math.cos(angle)*radius, height/2, Math.sin(angle)*radius);
             Engine.pipes.push({ mesh, baseY: height/2, currentScale: 1.0, glowIntensity: 0, glowColor: new THREE.Color(0x000000) });
             Engine.scene.add(mesh);
-        }
-    },
-
-    buildSparks: () => {
-        for(let i=0; i<12; i++) { 
-            const light = new THREE.PointLight(0x000000, 0, 15); 
-            Engine.scene.add(light);
-            Engine.sparks.push({ light, active: false, intensity: 0 });
         }
     },
 
@@ -510,10 +584,6 @@ const Engine = {
                 pipe.mesh.material.emissive.copy(pipe.glowColor);
                 pipe.mesh.material.emissiveIntensity = pipe.glowIntensity;
                 pipe.currentScale = 1.01; 
-                const spark = Engine.sparks.find(s => !s.active) || Engine.sparks[0];
-                spark.active = true; spark.intensity = 50; spark.light.color.setHex(cHex);
-                spark.light.position.copy(pipe.mesh.position); spark.light.position.z += 1.5; 
-                spark.light.intensity = spark.intensity;
             }
         } catch (e) {}
     },
@@ -522,14 +592,13 @@ const Engine = {
         try {
             State.time = timestamp * 0.001;
             const currentAudioTime = AudioSys.ctx ? AudioSys.ctx.currentTime : 0;
-            // HARD SAFETY CAP (Max 8 visuals per frame)
             let cap = 0;
-            while(AudioSys.visualQueue.length > 0 && AudioSys.visualQueue[0].time <= currentAudioTime && cap < 8) {
+            while(AudioSys.visualQueue.length > 0 && AudioSys.visualQueue[0].time <= currentAudioTime && cap < 5) {
                 Engine.triggerVisualEvent(AudioSys.visualQueue.shift());
                 cap++;
             }
             Engine.pipes.forEach((pipe, i) => {
-                const en = isNaN(State.params.energy) ? 0.1 : State.params.energy;
+                const en = Number.isNaN(Number(State.params.energy)) ? 0.1 : Number(State.params.energy);
                 const breathSpeed = 0.5 + en * 2.0;
                 pipe.mesh.position.y = pipe.baseY + Math.sin(State.time * breathSpeed + i) * (0.2 + en * 0.5); 
                 if (pipe.glowIntensity > 0.01) {
@@ -541,14 +610,7 @@ const Engine = {
                     pipe.mesh.scale.set(pipe.currentScale, 1.0, pipe.currentScale);
                 } else pipe.mesh.scale.set(1.0, 1.0, 1.0);
             });
-            Engine.sparks.forEach(spark => {
-                if (spark.active) {
-                    spark.intensity = MathLogic.lerp(spark.intensity, 0, 0.1); 
-                    spark.light.intensity = spark.intensity;
-                    if (spark.intensity < 1) { spark.active = false; spark.light.intensity = 0; }
-                }
-            });
-            if (Engine.particles) Engine.particles.rotation.y = State.time * 0.02 * (1 + (isNaN(State.params.energy) ? 0.1 : State.params.energy));
+            if (Engine.particles) Engine.particles.rotation.y = State.time * 0.02 * (1 + (Number.isNaN(Number(State.params.energy)) ? 0.1 : Number(State.params.energy)));
             if (Engine.controls) Engine.controls.update();
             if (Engine.renderer) Engine.renderer.render(Engine.scene, Engine.camera);
             requestAnimationFrame(Engine.loop);
@@ -560,9 +622,15 @@ const Engine = {
 document.getElementById('btn-start').addEventListener('click', () => {
     if (!State.isAudioReady) {
         AudioSys.init();
-        document.getElementById('btn-start').innerText = "Boiler Active";
-        State.ai.status = 'LISTENING';
+        const btn = document.getElementById('btn-start');
+        btn.innerText = "Boiler Active";
+        btn.classList.add('active');
+        State.isSequencerRunning = false; // LLM must autonomously start the playback!
         UI.updateStatus();
+        UI.log("Boiler pressure rising... Steampunk proxy online. Awaiting autonomous AI composition.", "system");
+        
+        // Trigger the LLM to write the first musical blueprint and start the song
+        LLM.think("Initialize the composition with a beautiful, deep, and dramatic steampunk vibe.");
     }
 });
 document.querySelectorAll('.btn-feedback').forEach(btn => {
