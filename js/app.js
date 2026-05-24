@@ -78,12 +78,10 @@ const MusicTheory = {
             let cleanNote = rootStr.replace('Db', 'C#').replace('Eb', 'D#').replace('Gb', 'F#').replace('Ab', 'G#').replace('Bb', 'A#');
             const match = cleanNote.match(/^([A-G]#?)(\d+)$/);
             if (!match) return ["C4", "E4", "G4", "A4", "B4"];
-            
             const rootKey = match[1];
             const rootOctave = parseInt(match[2], 10);
             const rootIndex = MusicTheory.notes.indexOf(rootKey);
             const intervals = MusicTheory.scales[scaleType] || MusicTheory.scales.aeolian;
-            
             const scaleArray = [];
             for (let octOffset = 0; octOffset < 2; octOffset++) {
                 intervals.forEach(interval => {
@@ -142,38 +140,30 @@ const AudioSys = {
             AudioSys.ctx = new (window.AudioContext || window.webkitAudioContext)();
             AudioSys.masterGain = AudioSys.ctx.createGain();
             AudioSys.masterGain.gain.value = 0.5; 
-            
             AudioSys.compressor = AudioSys.ctx.createDynamicsCompressor();
             AudioSys.compressor.threshold.value = -24;
             AudioSys.compressor.knee.value = 30;
             AudioSys.compressor.ratio.value = 12;
             AudioSys.compressor.attack.value = 0.003;
             AudioSys.compressor.release.value = 0.25;
-
             AudioSys.delay = AudioSys.ctx.createDelay();
             AudioSys.delay.delayTime.value = 0.5; 
             const feedback = AudioSys.ctx.createGain();
             feedback.gain.value = 0.25; 
-            
             const delayFilter = AudioSys.ctx.createBiquadFilter();
             delayFilter.type = 'highpass';
             delayFilter.frequency.value = 400; 
-
             AudioSys.delay.connect(delayFilter);
             delayFilter.connect(feedback);
             feedback.connect(AudioSys.delay);
             AudioSys.delay.connect(AudioSys.masterGain);
-            
             AudioSys.masterGain.connect(AudioSys.compressor);
             AudioSys.compressor.connect(AudioSys.ctx.destination);
-            
             UI.log("Acoustic Engine Online.", "system");
             State.isAudioReady = true;
-
             AudioSys.nextNoteTime = AudioSys.ctx.currentTime + 0.1;
             AudioSys.scheduler();
         } catch (e) {
-            console.error("Audio Init Failed:", e);
             UI.log("Audio Error: " + e.message, "system");
         }
     },
@@ -184,12 +174,10 @@ const AudioSys = {
         const osc2 = AudioSys.ctx.createOscillator(); 
         const gain = AudioSys.ctx.createGain();
         const filter = AudioSys.ctx.createBiquadFilter();
-        
         gain.gain.setValueAtTime(0, time);
         let sendToDelay = false;
         const maxDuration = duration > 2.0 ? 2.0 : duration; 
         const tail = 0.5; 
-        
         switch (instrument) {
             case 'bass':
                 osc.type = 'sawtooth'; osc.frequency.setValueAtTime(freq * 0.25, time); 
@@ -228,7 +216,7 @@ const AudioSys = {
                 osc2.type = 'sine'; osc2.frequency.setValueAtTime(freq * 1.005, time); 
                 filter.type = 'lowpass'; filter.frequency.setValueAtTime(800, time);
                 gain.gain.linearRampToValueAtTime(0.12, time + 1.0);
-                gain.gain.setTargetAtTime(0, time + duration, 1.0);
+                gain.gain.setTargetAtTime(0, time + maxDuration, 1.0);
                 break;
             case 'choir':
                 osc.type = 'sawtooth'; osc.frequency.setValueAtTime(freq, time);
@@ -266,12 +254,8 @@ const AudioSys = {
         osc.start(time); osc2.start(time);
         osc.stop(stopTime); osc2.stop(stopTime);
 
-        // Forced Disconnect
         setTimeout(() => {
-            try {
-                osc.disconnect(); osc2.disconnect();
-                filter.disconnect(); gain.disconnect();
-            } catch (e) {}
+            try { osc.disconnect(); osc2.disconnect(); filter.disconnect(); gain.disconnect(); } catch (e) {}
         }, (stopTime - AudioSys.ctx.currentTime) * 1000 + 100);
 
         AudioSys.visualQueue.push({ time, instrument, noteFreq: freq });
@@ -282,12 +266,10 @@ const AudioSys = {
         if (!State.isSequencerRunning || State.params.scaleArray.length === 0) return;
         const tx = State.params.texture;
         const rh = State.params.rhythm;
-        
         if (stepNumber % 8 === 0) {
             const bassInst = (tx === 'ethereal' || tx === 'vocal') ? 'sub' : 'bass';
             AudioSys.playSynth(bassInst, MusicTheory.noteToFreq(MusicTheory.getBassNote()), time, 2.0);
         }
-
         const chordStep = rh === 'polyrhythmic' ? 6 : 0;
         if (stepNumber === chordStep || stepNumber === 0) {
             let chordInst = 'pad';
@@ -298,19 +280,15 @@ const AudioSys = {
                 AudioSys.playSynth(chordInst, MusicTheory.noteToFreq(note), time, 4.0);
             });
         }
-
         let playArp = false;
         if (rh === 'flowing' && stepNumber % 2 === 0) playArp = true;
         if (rh === 'staccato' && stepNumber % 2 === 0) playArp = true;
         if (rh === 'polyrhythmic' && stepNumber % 3 === 0) playArp = true;
         if (rh === 'march' && (stepNumber % 4 === 0 || stepNumber === 14)) playArp = true;
-        
         if (playArp && Math.random() < (State.params.density * 0.8 + 0.2)) {
             const arpInst = (tx === 'crystalline' || tx === 'ethereal') ? 'bell' : 'pluck';
-            const note = MusicTheory.getArpeggioNote(stepNumber);
-            AudioSys.playSynth(arpInst, MusicTheory.noteToFreq(note), time, 0.3);
+            AudioSys.playSynth(arpInst, MusicTheory.noteToFreq(MusicTheory.getArpeggioNote(stepNumber)), time, 0.3);
         }
-        
         if (stepNumber % 4 === 2 && Math.random() < (State.params.energy * 0.5)) {
             const accentInst = tx === 'aggressive' ? 'brass' : 'organ';
             AudioSys.playSynth(accentInst, MusicTheory.noteToFreq(MusicTheory.getTensionNote()), time, 1.5);
@@ -334,9 +312,7 @@ const AudioSys = {
                 catchUpLimit++;
             }
             AudioSys.timerID = setTimeout(AudioSys.scheduler, AudioSys.lookahead);
-        } catch (e) {
-            console.error("Scheduler Error:", e);
-        }
+        } catch (e) { console.error("Scheduler Error:", e); }
     }
 };
 
@@ -355,34 +331,29 @@ const LLM = {
         UI.updateStatus();
         const endpoint = document.getElementById('config-endpoint').value;
         const model = document.getElementById('config-model').value;
-        
         if (explicitPrompt) State.ai.memory.push(`Human: ${explicitPrompt}`);
         else State.ai.memory.push(`System: Evolve the composition gracefully.`);
         if (State.ai.memory.length > 4) State.ai.memory.shift();
-
-        const systemPrompt = `You are a Master Composer AI. Orchestrate the procedural synthesizer. Respond ONLY with a strict JSON object:
+        const systemPrompt = `You are a Master Composer AI. Respond ONLY with a strict JSON object:
 {
-  "thought": "Internal monologue on chooses.",
+  "thought": "Internal monologue.",
   "songNature": "A poetic description.",
   "rootNote": "e.g. C4, D#4, F4",
-  "scaleType": "Choose: ionian, aeolian, dorian, phrygian, lydian, harmonic_minor, pentatonic_minor",
-  "texture": "Choose: ethereal, mechanical, aggressive, crystalline, vocal",
-  "rhythm": "Choose: flowing, staccato, polyrhythmic, march",
+  "scaleType": "ionian, aeolian, dorian, phrygian, lydian, harmonic_minor, pentatonic_minor",
+  "texture": "ethereal, mechanical, aggressive, crystalline, vocal",
+  "rhythm": "flowing, staccato, polyrhythmic, march",
   "energy": 0.5,
   "density": 0.5
 }`;
-
         try {
             const response = await fetch(endpoint, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ model: model, prompt: systemPrompt, stream: false, format: 'json' })
             });
-
             const data = await response.json();
             let rawText = data.response;
             let parsed = null;
-
             try {
                 rawText = rawText.replace(/```json/gi, '').replace(/```/g, '').trim();
                 const start = rawText.indexOf('{');
@@ -390,29 +361,24 @@ const LLM = {
                 if (start !== -1 && end !== -1) parsed = JSON.parse(rawText.substring(start, end + 1));
                 else throw new Error("No JSON object found.");
             } catch (pE) { throw new Error("Failed to parse JSON."); }
-            
             UI.log(`<strong>Emotion:</strong> ${parsed.songNature || 'Unknown'}`, "ai");
-            
             if (parsed.rootNote && parsed.scaleType) {
                 State.params.rootNote = parsed.rootNote;
                 State.params.scaleType = parsed.scaleType;
                 State.params.scaleArray = MusicTheory.generateScaleArray(parsed.rootNote, parsed.scaleType);
-                
                 const safeF = (v, d) => {
                     let res = Array.isArray(v) ? v[0] : v;
                     res = parseFloat(res);
                     return isNaN(res) ? d : res;
                 };
-
                 State.params.energy = Math.max(0.01, Math.min(1, safeF(parsed.energy, 0.5)));
                 State.params.density = Math.max(0.01, Math.min(1, safeF(parsed.density, 0.5)));
                 State.params.texture = parsed.texture || "mechanical";
                 State.params.rhythm = parsed.rhythm || "flowing";
-                
                 if (!State.isSequencerRunning) {
                     State.isSequencerRunning = true;
                     AudioSys.nextNoteTime = AudioSys.ctx.currentTime + 0.1;
-                    UI.log("AI blueprint received. Symphony Engaged.", "system");
+                    UI.log("AI emotional blueprint received. Symphony Engaged.", "system");
                 }
             }
             State.ai.status = 'LISTENING';
@@ -425,7 +391,7 @@ const LLM = {
     }
 };
 
-// --- 4. ENGINE & VIBE (Highly Discrete Visuals) ---
+// --- 4. ENGINE & VIBE (Standard Performance Profile) ---
 const Engine = {
     scene: new THREE.Scene(),
     camera: new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000),
@@ -434,26 +400,24 @@ const Engine = {
     pipes: [], 
     sparks: [], 
     particles: null,
-    
     ambientLight: null,
     baseProps: {
-        brass: { color: 0xb5a642, metalness: 0.9, roughness: 0.2, clearcoat: 1.0 },
-        copper: { color: 0xb87333, metalness: 0.8, roughness: 0.3, clearcoat: 0.8 },
-        steel: { color: 0x556677, metalness: 0.7, roughness: 0.4, clearcoat: 0.5 }
+        brass: { color: 0xb5a642, metalness: 0.9, roughness: 0.4 },
+        copper: { color: 0xb87333, metalness: 0.8, roughness: 0.5 },
+        steel: { color: 0x556677, metalness: 0.7, roughness: 0.6 }
     },
 
     init: () => {
         try {
             const container = document.getElementById('canvas-container');
-            Engine.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: "high-performance" });
+            // BASIC RENDERER (NO DEPTH BUFFER HACKS)
+            Engine.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
             Engine.renderer.setSize(window.innerWidth, window.innerHeight);
             Engine.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2)); 
             Engine.renderer.setClearColor(0x020101, 1);
             container.appendChild(Engine.renderer.domElement);
-            
-            Engine.scene.fog = new THREE.FogExp2(0x020101, 0.015);
+            Engine.scene.fog = new THREE.FogExp2(0x020101, 0.01);
             Engine.camera.position.set(0, 10, 60);
-            
             Engine.controls = new OrbitControls(Engine.camera, Engine.renderer.domElement);
             Engine.controls.enableDamping = true;
             Engine.controls.dampingFactor = 0.05;
@@ -461,28 +425,19 @@ const Engine = {
             Engine.controls.target.set(0, 15, 0); 
             Engine.controls.autoRotate = true;
             Engine.controls.autoRotateSpeed = 0.5;
-
             Engine.ambientLight = new THREE.AmbientLight(0x111111, 2);
             Engine.scene.add(Engine.ambientLight);
-            
             const spotlight = new THREE.PointLight(0xffddaa, 1000, 200);
             spotlight.position.set(0, 20, 30);
             Engine.scene.add(spotlight);
-            
-            const rimLight = new THREE.PointLight(0x4488ff, 500, 200);
-            rimLight.position.set(0, 10, -30);
-            Engine.scene.add(rimLight);
-
             Engine.buildMassivePipes();
             Engine.buildSparks();
             Engine.buildParticles();
-
             window.addEventListener('resize', () => {
                 Engine.camera.aspect = window.innerWidth / window.innerHeight;
                 Engine.camera.updateProjectionMatrix();
                 Engine.renderer.setSize(window.innerWidth, window.innerHeight);
             });
-
             requestAnimationFrame(Engine.loop);
         } catch (e) { console.error("Engine Init Failed:", e); }
     },
@@ -499,9 +454,9 @@ const Engine = {
             const height = baseHeight + (Math.random() * 15);
             const geo = new THREE.CylinderGeometry(1.5, 1.2, height, 16);
             const matProps = Engine.baseProps[type];
-            const mat = new THREE.MeshPhysicalMaterial({
+            // STABLE MATERIAL
+            const mat = new THREE.MeshStandardMaterial({
                 color: matProps.color, metalness: matProps.metalness, roughness: matProps.roughness,
-                clearcoat: matProps.clearcoat, clearcoatRoughness: 0.1,
                 emissive: 0x000000, emissiveIntensity: 0
             });
             const mesh = new THREE.Mesh(geo, mat);
@@ -521,7 +476,7 @@ const Engine = {
 
     buildParticles: () => {
         const geo = new THREE.BufferGeometry();
-        const count = 500;
+        const count = 300; 
         const pos = new Float32Array(count * 3);
         for(let i=0; i<count*3; i++) { pos[i] = (Math.random() - 0.5) * 150; }
         geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
@@ -532,6 +487,7 @@ const Engine = {
 
     triggerVisualEvent: (event) => {
         try {
+            if (!event || !event.instrument) return;
             const isInner = (event.instrument === 'pluck' || event.instrument === 'bell');
             const isMiddle = (event.instrument === 'organ' || event.instrument === 'brass' || event.instrument === 'pad' || event.instrument === 'choir');
             const targetRing = isInner ? {start:0, end:24} : isMiddle ? {start:24, end:60} : {start:60, end:108}; 
@@ -539,23 +495,23 @@ const Engine = {
             const randIndex = targetRing.start + Math.floor(Math.random() * range);
             const pipe = Engine.pipes[randIndex];
             if (pipe) {
-                let cHex = 0xffaa00; let lightIntensity = 40; let glowInt = 0.5;
+                let cHex = 0xffaa00; let glowInt = 0.5;
                 switch(event.instrument) {
-                    case 'pluck': cHex = 0x00ffff; lightIntensity = 80; glowInt = 0.8; break; 
-                    case 'bell': cHex = 0xffffff; lightIntensity = 120; glowInt = 1.0; break; 
-                    case 'organ': cHex = 0xff8800; lightIntensity = 60; glowInt = 0.6; break; 
-                    case 'brass': cHex = 0xff3300; lightIntensity = 80; glowInt = 0.9; break; 
-                    case 'pad': cHex = 0x6600ff; lightIntensity = 30; glowInt = 0.3; break;   
-                    case 'choir': cHex = 0xff00ff; lightIntensity = 40; glowInt = 0.4; break; 
-                    case 'bass': cHex = 0xff0000; lightIntensity = 100; glowInt = 0.8; break; 
-                    case 'sub': cHex = 0x0000ff; lightIntensity = 100; glowInt = 0.7; break;  
+                    case 'pluck': cHex = 0x00ffff; glowInt = 0.8; break; 
+                    case 'bell': cHex = 0xffffff; glowInt = 1.0; break; 
+                    case 'organ': cHex = 0xff8800; glowInt = 0.6; break; 
+                    case 'brass': cHex = 0xff3300; glowInt = 0.9; break; 
+                    case 'pad': cHex = 0x6600ff; glowInt = 0.3; break;   
+                    case 'choir': cHex = 0xff00ff; glowInt = 0.4; break; 
+                    case 'bass': cHex = 0xff0000; glowInt = 0.8; break; 
+                    case 'sub': cHex = 0x0000ff; glowInt = 0.7; break;  
                 }
                 pipe.glowColor.setHex(cHex); pipe.glowIntensity = glowInt;
                 pipe.mesh.material.emissive.copy(pipe.glowColor);
                 pipe.mesh.material.emissiveIntensity = pipe.glowIntensity;
                 pipe.currentScale = 1.01; 
                 const spark = Engine.sparks.find(s => !s.active) || Engine.sparks[0];
-                spark.active = true; spark.intensity = lightIntensity; spark.light.color.setHex(cHex);
+                spark.active = true; spark.intensity = 50; spark.light.color.setHex(cHex);
                 spark.light.position.copy(pipe.mesh.position); spark.light.position.z += 1.5; 
                 spark.light.intensity = spark.intensity;
             }
@@ -566,8 +522,11 @@ const Engine = {
         try {
             State.time = timestamp * 0.001;
             const currentAudioTime = AudioSys.ctx ? AudioSys.ctx.currentTime : 0;
-            while(AudioSys.visualQueue.length > 0 && AudioSys.visualQueue[0].time <= currentAudioTime) {
+            // HARD SAFETY CAP (Max 8 visuals per frame)
+            let cap = 0;
+            while(AudioSys.visualQueue.length > 0 && AudioSys.visualQueue[0].time <= currentAudioTime && cap < 8) {
                 Engine.triggerVisualEvent(AudioSys.visualQueue.shift());
+                cap++;
             }
             Engine.pipes.forEach((pipe, i) => {
                 const en = isNaN(State.params.energy) ? 0.1 : State.params.energy;
